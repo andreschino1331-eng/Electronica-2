@@ -1,0 +1,113 @@
+#include <Arduino.h>
+
+const int LED_VERDE = 5;
+const int LED_AMARILLO = 18;
+const int LED_ROJO = 19;
+const int LED_BLANCO = 21; 
+
+int boton_SUMA = 15;
+int boton_RESTA = 2;
+int boton_MODO = 4;
+int modo = 0;
+int num = 0;
+int salida, salida2, salida3;
+
+
+void setup() {
+  pinMode(LED_VERDE, OUTPUT);
+  pinMode(LED_AMARILLO, OUTPUT);
+  pinMode(LED_ROJO, OUTPUT);
+  pinMode(LED_BLANCO, OUTPUT);
+  pinMode(boton_SUMA, INPUT_PULLDOWN);
+  pinMode(boton_RESTA, INPUT_PULLDOWN);
+  pinMode(boton_MODO, INPUT_PULLUP);
+
+  digitalWrite(LED_VERDE, LOW);
+  digitalWrite(LED_AMARILLO, LOW);
+  digitalWrite(LED_ROJO, LOW);
+  digitalWrite(LED_BLANCO, LOW);
+}
+
+void loop() {
+  // Botón SUMA
+  int estadoSuma = digitalRead(boton_SUMA);
+  delay(15);
+  if (estadoSuma == HIGH) {
+    salida = 1;
+  }
+  if (salida == 1 && estadoSuma == LOW) {
+    salida = 0;
+    num++;
+    // Limitar el valor de num según el modo (subir)
+    if (modo == 0 && num > 4) {
+      num = 1;
+    }
+    if (modo == 1 && num > 15) {
+      num = 0;
+    }
+  }
+
+  int estadoResta = digitalRead(boton_RESTA);
+  delay(10);
+  if (estadoResta == LOW) {
+    salida2 = 1;
+  }
+  if (salida2 == 1 && estadoResta == HIGH) {
+    salida2 = 0;
+    num--;
+    // Limitar el valor de num según el modo (bajar)
+    if (modo == 0 && num < 1) {
+      num = 4;
+    }
+    if (modo == 1 && num < 0) {
+      num = 15;
+    }
+  }
+
+
+  int estadoModo = digitalRead(boton_MODO);
+  delay(10);
+  if (estadoModo == HIGH) {
+    salida3 = 1;
+  }
+  if (salida3 == 1 && estadoModo == LOW) {
+    salida3 = 0;
+    modo++;
+    if (modo > 1)
+      modo = 0;
+    num = 0;
+  }
+
+
+  digitalWrite(LED_VERDE, LOW);
+  digitalWrite(LED_AMARILLO, LOW);
+  digitalWrite(LED_ROJO, LOW);
+  digitalWrite(LED_BLANCO, LOW);
+
+  if (modo == 0) {
+    switch (num) {
+      // 1 - Verde
+      case 1:
+        digitalWrite(LED_VERDE, HIGH);
+        break;
+      // 2 - Amarillo
+      case 2:
+        digitalWrite(LED_AMARILLO, HIGH);
+        break;
+      // 3 - Rojo
+      case 3:
+        digitalWrite(LED_ROJO, HIGH);
+        break;
+      // 4 - Blanco
+      case 4:
+        digitalWrite(LED_BLANCO, HIGH);
+        break;
+    }
+  } else if (modo == 1) {
+
+    digitalWrite(LED_VERDE, bitRead(num, 0));
+    digitalWrite(LED_AMARILLO, bitRead(num, 1));
+    digitalWrite(LED_ROJO, bitRead(num, 2));
+    digitalWrite(LED_BLANCO, bitRead(num, 3));
+  }
+}
