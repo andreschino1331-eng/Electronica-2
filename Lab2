@@ -1,0 +1,266 @@
+
+#include <Arduino.h>
+
+const int LED1 = 5;
+const int LED2 = 18;
+const int LED3 = 19;
+const int LED4 = 21;
+
+const int LED5 = 22;
+const int LED6 = 23;
+const int LED7 = 25;
+const int LED8 = 26;
+
+const int BOTON_SUMA = 15;
+const int BOTON_RESTA = 2;
+
+const int LED_ALARMA = 27;
+
+
+const int TOUCH_PIN = 4;  
+const int TOUCH_THRESHOLD = 30;  
+volatile int contador_manual = 0;
+volatile int contador_auto = 0;
+int modo = 0;
+
+volatile unsigned long last_interrupt_time_suma = 0;
+volatile unsigned long last_interrupt_time_resta = 0;
+const unsigned long DEBOUNCE_DELAY = 50;
+
+volatile bool flag_suma = false;
+volatile bool flag_resta = false;
+
+hw_timer_t *Timer0_Cfg = NULL;
+volatile bool flag_timer = false;
+
+const int PRESCALER = 80;
+const int TIMER_TICKS = 250000;
+
+
+bool estado_alarma = false;
+bool alarma_activada = false;
+unsigned long tiempo_ultimo_cambio = 0;
+unsigned long intervalo_alarma = 0;
+
+void IRAM_ATTR ISR_Suma();
+void IRAM_ATTR ISR_Resta();
+void IRAM_ATTR Timer0_ISR();
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(LED1, OUTPUT);
+  pinMode(LED2, OUTPUT);
+  pinMode(LED3, OUTPUT);
+  pinMode(LED4, OUTPUT);
+  pinMode(LED5, OUTPUT);
+  pinMode(LED6, OUTPUT);
+  pinMode(LED7, OUTPUT);
+  pinMode(LED8, OUTPUT);
+  pinMode(LED_ALARMA, OUTPUT);
+
+  digitalWrite(LED1, LOW);
+  digitalWrite(LED2, LOW);
+  digitalWrite(LED3, LOW);
+  digitalWrite(LED4, LOW);
+  digitalWrite(LED5, LOW);
+  digitalWrite(LED6, LOW);
+  digitalWrite(LED7, LOW);
+  digitalWrite(LED8, LOW);
+  digitalWrite(LED_ALARMA, LOW);
+
+  pinMode(BOTON_SUMA, INPUT_PULLDOWN);
+  pinMode(BOTON_RESTA, INPUT_PULLDOWN);
+
+  attachInterrupt(digitalPinToInterrupt(BOTON_SUMA), ISR_Suma, RISING);
+  attachInterrupt(digitalPinToInterrupt(BOTON_RESTA), ISR_Resta, RISING);
+
+  Timer0_Cfg = timerBegin(0, PRESCALER, true);
+  timerAttachInterrupt(Timer0_Cfg, &Timer0_ISR, true);
+  timerAlarmWrite(Timer0_Cfg, TIMER_TICKS, true);
+  timerAlarmEnable(Timer0_Cfg);
+
+
+  Serial.println("Sensor capacitivo configurado en GPIO4 (T0)");
+}
+
+void IRAM_ATTR ISR_Suma() {
+  unsigned long current_time = millis();
+  if (current_time - last_interrupt_time_suma > DEBOUNCE_DELAY) {
+    last_interrupt_time_suma = current_time;
+    flag_suma = true;
+  }
+}
+
+void IRAM_ATTR ISR_Resta() {
+  unsigned long current_time = millis();
+  if (current_time - last_interrupt_time_resta > DEBOUNCE_DELAY) {
+    last_interrupt_time_resta = current_time;
+    flag_resta = true;
+  }
+}
+
+void IRAM_ATTR Timer0_ISR() {
+  flag_timer = true;
+}
+
+void procesarBotones() {
+  if (flag_suma) {
+    flag_suma = false;
+    contador_manual++;
+    if (contador_manual > 15) {
+      contador_manual = 0;
+    }
+    Serial.print("Suma: ");
+    Serial.println(contador_manual);
+  }
+  
+  if (flag_resta) {
+    flag_resta = false;
+    contador_manual--;
+    if (contador_manual < 0) {
+      contador_manual = 15;
+    }
+    Serial.print("Resta: ");
+    Serial.println(contador_manual);
+  }
+}
+
+
+void procesarSensorCapacitivo() {
+  static bool touch_prev = false;
+  int touch_value = touchRead(TOUCH_PIN);
+  
+  // Si el valor es menor al umbral, se detecta toque
+  bool touch_detected = (touch_value < TOUCH_THRESHOLD);
+  
+  if (touch_detected && !touch_prev) {
+    // Reiniciar contador automático
+    contador_auto = 0;
+    Serial.print("Sensor capacitivo activado! Valor: ");
+    Serial.print(touch_value);
+    Serial.println(" - Contador automático reiniciado a 0");
+  }
+  
+  touch_prev = touch_detected;
+}
+
+void compararContadores() {
+  if (contador_manual == contador_auto) {
+    if (!alarma_activada) {
+      alarma_activada = true;
+      estado_alarma = !estado_alarma;
+      digitalWrite(LED_ALARMA, estado_alarma);
+      
+
+      intervalo_alarma = map(contador_manual, 0, 15, 500, 50);
+      tiempo_ultimo_cambio = millis();
+      
+      Serial.print("¡ALARMA! Coincidencia en: ");
+      Serial.print(contador_manual);
+      Serial.print(" - Intervalo: ");
+      Serial.println(intervalo_alarma);
+
+      contador_auto = 0;
+    } else {
+      // Efecto de intermitencia
+      unsigned long tiempo_actual = millis();
+      if (tiempo_actual - tiempo_ultimo_cambio >= intervalo_alarma) {
+        tiempo_ultimo_cambio = tiempo_actual;
+        estado_alarma = !estado_alarma;
+        digitalWrite(LED_ALARMA, estado_alarma);
+      }
+    }
+  } else {
+    alarma_activada = false;
+    digitalWrite(LED_ALARMA, LOW);
+  }
+}
+
+void mostrarContadorManual() {
+  if (modo == 0) {
+    digitalWrite(LED1, LOW);
+    digitalWrite(LED2, LOW);
+    digitalWrite(LED3, LOW);
+    digitalWrite(LED4, LOW);
+    
+    switch (contador_manual) {
+      case 0: break;
+      case 1: digitalWrite(LED1, HIGH); break;
+      case 2: digitalWrite(LED2, HIGH); break;
+      case 3: digitalWrite(LED3, HIGH); break;
+      case 4: digitalWrite(LED4, HIGH); break;
+      case 5: digitalWrite(LED1, HIGH); digitalWrite(LED2, HIGH); break;
+      case 6: digitalWrite(LED1, HIGH); digitalWrite(LED3, HIGH); break;
+      case 7: digitalWrite(LED1, HIGH); digitalWrite(LED4, HIGH); break;
+      case 8: digitalWrite(LED2, HIGH); digitalWrite(LED3, HIGH); break;
+      case 9: digitalWrite(LED2, HIGH); digitalWrite(LED4, HIGH); break;
+      case 10: digitalWrite(LED3, HIGH); digitalWrite(LED4, HIGH); break;
+      case 11: digitalWrite(LED1, HIGH); digitalWrite(LED2, HIGH); digitalWrite(LED3, HIGH); break;
+      case 12: digitalWrite(LED1, HIGH); digitalWrite(LED2, HIGH); digitalWrite(LED4, HIGH); break;
+      case 13: digitalWrite(LED1, HIGH); digitalWrite(LED3, HIGH); digitalWrite(LED4, HIGH); break;
+      case 14: digitalWrite(LED2, HIGH); digitalWrite(LED3, HIGH); digitalWrite(LED4, HIGH); break;
+      case 15: digitalWrite(LED1, HIGH); digitalWrite(LED2, HIGH); digitalWrite(LED3, HIGH); digitalWrite(LED4, HIGH); break;
+    }
+  } else {
+    digitalWrite(LED4, bitRead(contador_manual, 3));
+    digitalWrite(LED3, bitRead(contador_manual, 2));
+    digitalWrite(LED2, bitRead(contador_manual, 1));
+    digitalWrite(LED1, bitRead(contador_manual, 0));
+  }
+}
+
+void mostrarContadorAuto() {
+  if (modo == 0) {
+    digitalWrite(LED5, LOW);
+    digitalWrite(LED6, LOW);
+    digitalWrite(LED7, LOW);
+    digitalWrite(LED8, LOW);
+    
+    switch (contador_auto) {
+      case 0: break;
+      case 1: digitalWrite(LED5, HIGH); break;
+      case 2: digitalWrite(LED6, HIGH); break;
+      case 3: digitalWrite(LED7, HIGH); break;
+      case 4: digitalWrite(LED8, HIGH); break;
+      case 5: digitalWrite(LED5, HIGH); digitalWrite(LED6, HIGH); break;
+      case 6: digitalWrite(LED5, HIGH); digitalWrite(LED7, HIGH); break;
+      case 7: digitalWrite(LED5, HIGH); digitalWrite(LED8, HIGH); break;
+      case 8: digitalWrite(LED6, HIGH); digitalWrite(LED7, HIGH); break;
+      case 9: digitalWrite(LED6, HIGH); digitalWrite(LED8, HIGH); break;
+      case 10: digitalWrite(LED7, HIGH); digitalWrite(LED8, HIGH); break;
+      case 11: digitalWrite(LED5, HIGH); digitalWrite(LED6, HIGH); digitalWrite(LED7, HIGH); break;
+      case 12: digitalWrite(LED5, HIGH); digitalWrite(LED6, HIGH); digitalWrite(LED8, HIGH); break;
+      case 13: digitalWrite(LED5, HIGH); digitalWrite(LED7, HIGH); digitalWrite(LED8, HIGH); break;
+      case 14: digitalWrite(LED6, HIGH); digitalWrite(LED7, HIGH); digitalWrite(LED8, HIGH); break;
+      case 15: digitalWrite(LED5, HIGH); digitalWrite(LED6, HIGH); digitalWrite(LED7, HIGH); digitalWrite(LED8, HIGH); break;
+    }
+  } else {
+    digitalWrite(LED8, bitRead(contador_auto, 3));
+    digitalWrite(LED7, bitRead(contador_auto, 2));
+    digitalWrite(LED6, bitRead(contador_auto, 1));
+    digitalWrite(LED5, bitRead(contador_auto, 0));
+  }
+}
+
+void loop() {
+  procesarBotones();
+
+  if (flag_timer) {
+    flag_timer = false;
+    contador_auto++;
+    if (contador_auto > 15) {
+      contador_auto = 0;
+    }
+  }
+
+  procesarSensorCapacitivo();
+
+
+  compararContadores();
+
+  mostrarContadorManual();
+  mostrarContadorAuto();
+
+  delay(10);
+}
