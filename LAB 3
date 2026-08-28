@@ -1,0 +1,107 @@
+#include <Arduino.h>
+#include <LiquidCrystal.h>
+
+const int RS = 15;
+const int EN = 2;
+const int D0 = 4;
+const int D1 = 5;
+const int D2 = 18;
+const int D3 = 19;
+const int D4 = 21;
+const int D5 = 22;
+const int D6 = 23;
+const int D7 = 27;
+
+
+LiquidCrystal lcd(RS, EN, D0, D1, D2, D3, D4, D5, D6, D7);
+
+
+const int PIN_RED = 14;       
+const int PIN_GREEN = 12;
+const int PIN_BLUE = 13;
+const int POT_RED = 34;
+const int POT_GREEN = 35;
+const int PWM_FREQ = 5000;
+const int PWM_RESOLUTION = 8;
+const int PWM_CHANNEL_RED = 0;
+const int PWM_CHANNEL_GREEN = 1;
+const int PWM_CHANNEL_BLUE = 2;
+
+int redValue = 0;
+int greenValue = 0;
+int blueValue = 128;
+
+void setup() {
+  
+  Serial.begin(115200);
+  Serial.println("Sistema de control LED RGB - Modo 8 bits");
+  
+
+  analogReadResolution(12);
+  
+  // Configuración PWM
+  ledcSetup(PWM_CHANNEL_RED, PWM_FREQ, PWM_RESOLUTION);
+  ledcSetup(PWM_CHANNEL_GREEN, PWM_FREQ, PWM_RESOLUTION);
+  ledcSetup(PWM_CHANNEL_BLUE, PWM_FREQ, PWM_RESOLUTION);
+  
+  ledcAttachPin(PIN_RED, PWM_CHANNEL_RED);
+  ledcAttachPin(PIN_GREEN, PWM_CHANNEL_GREEN);
+  ledcAttachPin(PIN_BLUE, PWM_CHANNEL_BLUE);
+  
+  
+  lcd.begin(16, 2);
+  lcd.print("Iniciando...");
+  delay(1000);
+  lcd.clear();
+  lcd.print("LCD 8 BITS OK");
+  delay(1000);
+  lcd.clear();
+}
+
+void loop() {
+  
+  int potRed = analogRead(POT_RED);
+  int potGreen = analogRead(POT_GREEN);
+  redValue = map(potRed, 0, 4095, 0, 255);
+  greenValue = map(potGreen, 0, 4095, 0, 255);
+  
+  //  UART
+  Serial.print("Rojo: ");
+  Serial.print(redValue);
+  Serial.print(" | Verde: ");
+  Serial.println(greenValue);
+  
+  //AZUL
+  while (Serial.available()) {
+    char inChar = (char)Serial.read();
+    if (inChar == '+' && blueValue < 255) {
+      blueValue++;
+      Serial.println("Azul: " + String(blueValue));
+    } else if (inChar == '-' && blueValue > 0) {
+      blueValue--;
+      Serial.println("Azul: " + String(blueValue));
+    }
+  }
+  
+  // Actualizar PWM
+  ledcWrite(PWM_CHANNEL_RED, redValue);
+  ledcWrite(PWM_CHANNEL_GREEN, greenValue);
+  ledcWrite(PWM_CHANNEL_BLUE, blueValue);
+  
+
+  lcd.setCursor(0, 0);
+  lcd.print("Rojo:");
+  lcd.print(redValue);
+  lcd.print("Verde:");
+  lcd.print(greenValue);
+  
+  lcd.setCursor(0, 1);
+  lcd.print("Azul:");
+  lcd.print(blueValue);
+  lcd.print("       ");
+  
+  delay(50);
+}
+
+
+
